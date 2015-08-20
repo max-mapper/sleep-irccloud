@@ -16,6 +16,6 @@
     "ndjson": "^1.4.1",
     "prompt-sync": "^2.1.0",
     "through2": "^2.0.0",
-    "websocket-stream": "^1.5.1"
+    "websocket-stream": "^2.0.0"
   }
 }

@@ -6,15 +6,46 @@ var debug = require('debug')('sleep-irccloud')
 
 var baseUrl = 'https://www.irccloud.com'
 
-module.exports = function (opts) {
+module.exports.socket = function (opts) {
+  var socketOpts =  {origin: baseUrl, headers: {'Cookie': 'session=' + opts.session}}
+  return websocket('wss://api.irccloud.com/websocket/2', socketOpts)
+}
+
+module.exports.archive = function (opts) {
   var stream = duplex.obj()
-  var socketOpts =  {origin: 'https://www.irccloud.com', headers: {'Cookie': 'session=' + opts.session}}
-  var ws = websocket('wss://www.irccloud.com/', socketOpts)
+  
+  getExports(function (exports) {
+    console.log('inprogress', exports.inprogress)
+    var ws = module.exports.socket(opts)
+    // trigger new export
+    if (exports.inprogress.length === 0) {
+      var auth = JSON.stringify({"timezone":"Europe/Copenhagen","_reqid":1,"_method":"export-log"})
+      ws.write(auth)
+    }
+  })
+  
+  function getExports (cb) {
+    got(baseUrl + '/chat/log-exports', {json: true, headers: {'Cookie': 'session=' + opts.session}}, function (err, data) {
+      if (err) return stream.destroy(err)
+      cb(exports)
+    })
+  }
+}
+
+module.exports.backlog = function (opts) {
+  var stream = duplex.obj()
+  var ws = module.exports.socket(opts)
   ws.on('data', function (c) {
     try { c = JSON.parse(c) } catch (e) { return stream.destroy(e) }
     if (c.type !== 'oob_include') return // ignore other metadata
-    var msgStream = got(baseUrl + c.url, {headers: {'Cookie': 'session=' + opts.session, 'Accept-Encoding': 'gzip'}})
+    var msgUrl = baseUrl + c.url
+    var headers =  {'Cookie': 'session=' + opts.session, 'Accept-Encoding': 'gzip'}
+    debug(msgUrl, headers)
+    var msgStream = got.stream(msgUrl, {headers: headers})
     stream.setReadable(msgStream)
+  })
+  ws.on('error', function (e) {
+    stream.destroy(e)
   })
   return stream
 }
